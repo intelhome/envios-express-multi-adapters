@@ -9,12 +9,12 @@ class MessageServiceBaileys {
 
     async handleIncomingMessage(baileysMsg, sessionId, sock) {
         try {
-            // 1. Validaciones iniciales
-            if (!baileysMsg || !baileysMsg.key) return;
-            if (baileysMsg.key.fromMe) return;
-            if (!baileysMsg.message) return;
+            console.log(baileysMsg)
+            if (!baileysMsg || !baileysMsg._raw || !baileysMsg._raw.key) return;
+            if (baileysMsg._raw.key.fromMe) return;
+            if (!baileysMsg._raw.message) return;
 
-            const messageContent = baileysMsg.message;
+            const messageContent = baileysMsg._raw.message;
             const messageType = this.getMessageType(messageContent);
 
             if (this.ignoredTypes.includes(messageType)) {
@@ -22,47 +22,56 @@ class MessageServiceBaileys {
                 return;
             }
 
-            // Verificar si es grupo
-            const isGroup = baileysMsg.key.remoteJid.endsWith('@g.us');
+            // Verificar si es grupo (usando _raw)
+            const isGroup = baileysMsg._raw.key.remoteJid.endsWith('@g.us');
             if (isGroup) {
                 console.log(`⏭️ Ignorando mensaje de grupo en ${sessionId}`);
                 return;
             }
 
-            // 2. ⭐ Extraer datos del remitente con manejo de LID
-            let senderJid = baileysMsg.key.remoteJid;
-            let senderNumber = senderJid;
+            // 2. ⭐ Extraer JID completo con prioridad a @s.whatsapp.net
+            let senderJid;
+            let senderNumber;
 
-            // ⭐ Manejo de LID (Linked Device ID)
-            if (senderJid.includes('@lid')) {
-                try {
-                    // En Baileys, el número real está en key.participant cuando es LID
-                    if (baileysMsg.key.participant) {
-                        senderNumber = baileysMsg.key.participant.split('@')[0].split(':')[0];
-                        console.log(`✅ Número real obtenido desde LID: ${senderNumber}`);
-                    } else {
-                        // Fallback: extraer del propio JID
-                        senderNumber = senderJid.split('@')[0].split(':')[0];
-                        console.log(`✅ Número extraído de LID (fallback): ${senderNumber}`);
-                    }
-                } catch (error) {
-                    console.error('❌ Error procesando LID:', error);
-                    senderNumber = senderJid.split('@')[0];
-                }
-            } else if (senderJid.includes(':')) {
-                // LID en formato alternativo (numero:id@s.whatsapp.net)
-                senderNumber = senderJid.split(':')[0];
-                console.log(`✅ Número desde formato LID alternativo: ${senderNumber}`);
-            } else {
-                // Formato normal
-                senderNumber = senderJid.replace('@s.whatsapp.net', '');
+            const key = baileysMsg._raw.key;
+
+            // Prioridad 1: remoteJidAlt (número real cuando hay LID)
+            if (key.remoteJidAlt && key.remoteJidAlt.includes('@s.whatsapp.net')) {
+                senderJid = key.remoteJidAlt;
+                senderNumber = key.remoteJidAlt.replace('@s.whatsapp.net', '');
+                console.log(`✅ Usando remoteJidAlt: ${senderJid}`);
             }
-
-            // 3. Obtener nombre del contacto
-            let contactName = baileysMsg.pushName || '';
+            // Prioridad 2: participantAlt (si existe y es @s.whatsapp.net)
+            else if (key.participantAlt && key.participantAlt.includes('@s.whatsapp.net')) {
+                senderJid = key.participantAlt;
+                senderNumber = key.participantAlt.replace('@s.whatsapp.net', '');
+                console.log(`✅ Usando participantAlt: ${senderJid}`);
+            }
+            // Prioridad 3: participant (si existe y es @s.whatsapp.net)
+            else if (key.participant && key.participant.includes('@s.whatsapp.net')) {
+                senderJid = key.participant;
+                senderNumber = key.participant.replace('@s.whatsapp.net', '');
+                console.log(`✅ Usando participant: ${senderJid}`);
+            }
+            // Prioridad 4: remoteJid si es @s.whatsapp.net (formato normal)
+            else if (key.remoteJid.includes('@s.whatsapp.net')) {
+                senderJid = key.remoteJid;
+                senderNumber = key.remoteJid.replace('@s.whatsapp.net', '');
+                console.log(`✅ Usando remoteJid (formato normal): ${senderJid}`);
+            }
+            // Fallback: Usar LID si no hay ninguna opción con @s.whatsapp.net
+            else {
+                senderJid = key.remoteJid;
+                senderNumber = key.remoteJid.split('@')[0].split(':')[0];
+                console.log(`⚠️ Usando LID como fallback: ${senderJid} -> número: ${senderNumber}`);
+            }
+            
+            // 3. Obtener nombre del contacto (usando pushName de _raw)
+            let contactName = baileysMsg._raw.pushName || '';
             if (!contactName) {
                 try {
-                    const [contactInfo] = await sock.onWhatsApp(senderNumber + '@s.whatsapp.net');
+                    // Usar el JID completo para buscar el contacto
+                    const [contactInfo] = await sock.onWhatsApp(senderJid);
                     contactName = contactInfo?.verifiedName || senderNumber;
                 } catch (err) {
                     contactName = senderNumber;
@@ -119,7 +128,7 @@ class MessageServiceBaileys {
 
             // 8. Enviar al Webhook
             return await this.webhookService.sendToWebhook({
-                id: baileysMsg.key.id,
+                id: baileysMsg._raw.key.id,
                 empresa: 'sigcrm_clinicasancho', // Parametrizable
                 name: contactName,
                 senderNumber: senderNumber,

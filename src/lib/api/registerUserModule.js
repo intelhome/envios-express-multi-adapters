@@ -1,5 +1,5 @@
 // Providers/Adapters - Repositorios
-const { whatsappProvider, sessionRepository, userRepository } = require('../shared/infrastructure/config/dependencies');
+const { whatsappProvider, sessionRepository, userRepository, PROVIDER_TYPE } = require('../shared/infrastructure/config/dependencies');
 
 // Use Cases - Sessions
 const LogoutSessionUseCase = require('../messaging/application/use-cases/sessions/LogoutSessionUseCase');
@@ -18,7 +18,7 @@ const UserRoutes = require("./routes/user.routes");
 
 module.exports = function registerUserModule(app) {
     // Instanciar casos de uso con sus dependencias
-    const logoutSessionUseCase = new LogoutSessionUseCase(whatsappProvider, sessionRepository, userRepository);
+    const logoutSessionUseCase = new LogoutSessionUseCase(whatsappProvider, sessionRepository, userRepository, PROVIDER_TYPE);
 
     // Casos de uso
     const createUserUseCase = new CreateUserUseCase(userRepository, whatsappProvider);

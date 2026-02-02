@@ -328,6 +328,40 @@
         margin: 0.25rem 0;
       }
 
+      .error-card {
+        background: linear-gradient(135deg, #fff5f5 0%, #ffe0e0 100%);
+        border-radius: 15px;
+        padding: 30px;
+        text-align: center;
+        border: 2px solid #ff4444;
+        margin-top: 20px;
+        transition: all 0.3s ease;
+      }
+
+      .error-card.hidden {
+        display: none;
+      }
+
+      .error-card .icon.error {
+        font-size: 48px;
+        margin-bottom: 15px;
+      }
+
+      .error-card h3 {
+        color: #d32f2f;
+        margin-bottom: 10px;
+      }
+
+      .error-card p {
+        color: #666;
+        margin-bottom: 5px;
+      }
+
+      .error-card .error-detail {
+        color: #999;
+        font-size: 0.9em;
+      }
+
       /* Animación de shake para el ícono de error */
       @keyframes shake {
         0%,
@@ -403,6 +437,13 @@
         <p>Tu cuenta de WhatsApp está vinculada</p>
         <div id="iduser"></div>
       </div>
+
+      <div class="error-card hidden" id="errorCard">
+        <div class="icon error">❌</div>
+        <h3>Servicio no disponible</h3>
+        <p>El servicio de WhatsApp está fuera de línea en este momento</p>
+        <p class="error-detail">Por favor, intenta más tarde</p>
+      </div>
     </div>
 
     <script
@@ -442,39 +483,44 @@
         statusDot.className = `status-dot ${status}`;
         statusText.textContent = text;
 
+        // ⭐ Obtener referencias a ambas tarjetas
+        const successCard = document.getElementById("successCard");
+        const errorCard = document.getElementById("errorCard");
+
         // Actualizar según el estado
         switch (status) {
           case "waiting":
             instructionCard.classList.remove("hidden");
             successCard.classList.remove("show");
+            errorCard.classList.add("hidden"); // ⭐ Ocultar error
             qrcodeContainer.style.display = "flex";
             break;
+
           case "connected":
             instructionCard.classList.add("hidden");
-            successCard.classList.add("show");
+            errorCard.classList.add("hidden"); // ⭐ Ocultar error
             qrcodeContainer.style.display = "none";
             whatsappIcon.classList.add("connected");
             setTimeout(() => whatsappIcon.classList.remove("connected"), 600);
 
+            // ⭐ Mostrar tarjeta de éxito
+            successCard.classList.add("show");
+
             // Mostrar datos del usuario si están disponibles
+            console.log("🔍 Datos del usuario al conectar:", userData);
             if (userData) {
               displayUserInfo(userData);
             }
             break;
+
           case "disconnected":
             instructionCard.classList.add("hidden");
-            // successCard.classList.remove("show");
-            qrcodeContainer.style.display = "none"; // Ocultar el contenedor del QR
+            successCard.classList.remove("show");
+            qrcodeContainer.style.display = "none";
             whatsappIcon.classList.remove("connected");
 
-            // Mostrar mensaje de desconexión en el lugar de la tarjeta de éxito
-            successCard.innerHTML = `
-              <div class="icon error">❌</div>
-              <h3>Servicio no disponible</h3>
-              <p>El servicio de WhatsApp está fuera de línea en este momento</p>
-              <p class="error-detail">Por favor, intenta más tarde</p>
-            `;
-            successCard.classList.add("show");
+            // ⭐ Mostrar tarjeta de error
+            errorCard.classList.remove("hidden");
             break;
         }
       }

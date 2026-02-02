@@ -1,5 +1,5 @@
 // Providers/Adapters - Repositorios
-const { whatsappProvider, sessionRepository, userRepository } = require('../shared/infrastructure/config/dependencies');
+const { whatsappProvider, sessionRepository, userRepository, PROVIDER_TYPE } = require('../shared/infrastructure/config/dependencies');
 
 // Use Cases - Sessions
 const LogoutSessionUseCase = require('../messaging/application/use-cases/sessions/LogoutSessionUseCase');
@@ -13,7 +13,7 @@ const SessionController = require('./controllers/SessionController');
 const SessionRoutes = require("./routes/session.routes");
 
 // Instanciar casos de uso con sus dependencias
-const logoutSessionUseCase = new LogoutSessionUseCase(whatsappProvider, sessionRepository, userRepository);
+const logoutSessionUseCase = new LogoutSessionUseCase(whatsappProvider, sessionRepository, userRepository, PROVIDER_TYPE);
 const getSessionStatusUseCase = new GetSessionStatusUseCase(whatsappProvider, sessionRepository);
 const initializeSessionsUseCase = new InitializeSessionsUseCase(whatsappProvider, sessionRepository);
 
