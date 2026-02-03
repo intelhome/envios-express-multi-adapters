@@ -234,7 +234,8 @@
         border-color: rgba(37, 211, 102, 0.4);
       }
 
-      .status-indicator.disconnected {
+      .status-indicator.disconnected,
+      .status-indicator.socket-error {
         background: rgba(239, 68, 68, 0.1);
         color: #dc2626;
         border-color: rgba(239, 68, 68, 0.3);
@@ -257,7 +258,8 @@
         animation: none;
       }
 
-      .status-dot.disconnected {
+      .status-dot.disconnected,
+      .status-dot.socket-error {
         background: #dc2626;
         animation: none;
       }
@@ -506,14 +508,28 @@
             // ⭐ Mostrar tarjeta de éxito
             successCard.classList.add("show");
 
-            // Mostrar datos del usuario si están disponibles
-            console.log("🔍 Datos del usuario al conectar:", userData);
             if (userData) {
               displayUserInfo(userData);
             }
             break;
 
+          case "reconnecting":
+            instructionCard.classList.add("hidden");
+            successCard.classList.remove("show");
+            errorCard.classList.add("hidden");
+            qrcodeContainer.style.display = "flex";
+            whatsappIcon.classList.add("reconnecting");
+            break;
+
           case "disconnected":
+            instructionCard.classList.add("hidden");
+            successCard.classList.remove("show");
+            qrcodeContainer.style.display = "flex";
+            whatsappIcon.classList.remove("connected");
+
+            break;
+
+          case "socket-error":
             instructionCard.classList.add("hidden");
             successCard.classList.remove("show");
             qrcodeContainer.style.display = "none";
@@ -521,6 +537,7 @@
 
             // ⭐ Mostrar tarjeta de error
             errorCard.classList.remove("hidden");
+
             break;
         }
       }
@@ -593,16 +610,30 @@
         updateStatus("connected", "Conectado", userData);
       });
 
+      // Evento: Reconectando Sesion
+      socket.on("reconnecting", (src) => {
+        qrcode.setAttribute("src", src);
+
+        console.log("🔄 Sesión reconectando...");
+        updateStatus("reconnecting", "Conectando...");
+      });
+
       // Evento: Usuario desconectado
       socket.on("disconnected", () => {
         console.log("❌ Usuario desconectado");
-        updateStatus("disconnected", "Desconectado - Esperando nueva conexión");
+        updateStatus("disconnected-sesion", "Error de conexión");
+      });
+
+      // Evento: Sesión Cerrada
+      socket.on("session-closed", () => {
+        console.log("❌ Sesión de WhatsApp cerrada");
+        updateStatus("disconnected", "Sesión cerrada - Escanea de nuevo");
       });
 
       // Manejar errores de conexión
       socket.on("connect_error", (error) => {
         console.error("❌ Error de conexión:", error);
-        updateStatus("disconnected", "Error de conexión");
+        updateStatus("socket-error", "Conexión perdida con el servidor");
       });
 
       // Manejar reconexión

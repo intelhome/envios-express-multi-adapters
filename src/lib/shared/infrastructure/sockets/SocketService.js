@@ -106,8 +106,36 @@ exports.emitDisconnected = (id_externo) => {
     io.to(id_externo).emit('qrstatus', '/assets/disconnected.svg');
 };
 
+/* Emitit Cierre de Sesion */
+exports.emitSessionClosed = (id_externo) => {
+    if (!io) {
+        console.warn('⚠️ Socket.IO no disponible para emitir session-closed');
+        return;
+    }
+
+    console.log(`📤 Emitiendo session-closed a sala: ${id_externo}`);
+    io.to(id_externo).emit('session-closed'); // ✅ Nombre diferente
+
+    io.to(id_externo).emit('log', 'Sesión cerrada y eliminada');
+    io.to(id_externo).emit('qrstatus', '/assets/disconnected.svg');
+};
+
+
+/* Emitir Reconexion */
+exports.emitReconnecting = (id_externo) => {
+    if (!io) {
+        console.warn('⚠️ Socket.IO no disponible para emitir reconnecting');
+        return;
+    }
+
+    console.log(`📤 Emitiendo reconnecting a sala: ${id_externo}`);
+    io.to(id_externo).emit('reconnecting', '/assets/loader.gif');
+
+    io.to(id_externo).emit('log', 'Reconectando sesión...');
+};
+
 exports.emitStatus = (sessionId, status) => {
-    
+
     const statusMap = {
         'connected': { event: 'ready', icon: './assets/check.svg', log: 'WhatsApp conectado' },
         'authenticated': { event: 'log', log: 'Sesión autenticada, cargando...' },

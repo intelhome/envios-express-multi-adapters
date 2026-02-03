@@ -9,7 +9,6 @@ class MessageServiceBaileys {
 
     async handleIncomingMessage(baileysMsg, sessionId, sock) {
         try {
-            console.log(baileysMsg)
             if (!baileysMsg || !baileysMsg._raw || !baileysMsg._raw.key) return;
             if (baileysMsg._raw.key.fromMe) return;
             if (!baileysMsg._raw.message) return;

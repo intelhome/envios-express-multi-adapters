@@ -140,11 +140,20 @@ class BaileysAdapter {
                     }
 
                     // 3. Emitir evento de socket
-                    try {
-                        SocketService.emitDisconnected(sessionId);
-                        console.log(`✅ Socket notificado: ${sessionId}`);
-                    } catch (error) {
-                        console.error(`Error emitiendo socket:`, error.message);
+                    if (reason === 'RESTART_REQUIRED') {
+                        try {
+                            SocketService.emitReconnecting(sessionId);
+                            console.log(`✅ Socket notificado (reconectando): ${sessionId}`);
+                        } catch (error) {
+                            console.error(`Error emitiendo socket:`, error.message);
+                        }
+                    } else {
+                        try {
+                            SocketService.emitSessionClosed(sessionId);
+                            console.log(`✅ Socket notificado: ${sessionId}`);
+                        } catch (error) {
+                            console.error(`Error emitiendo socket:`, error.message);
+                        }
                     }
 
                     // 4. Decidir si reconectar
@@ -186,32 +195,36 @@ class BaileysAdapter {
 
             // ✅ Manejar mensajes entrantes si está habilitado
             if (receiveMessages) {
-                sock.ev.on('messages.upsert', async ({ messages, type }) => {
-                    if (type !== 'notify') return; // Solo mensajes nuevos
+                try {
+                    sock.ev.on('messages.upsert', async ({ messages, type }) => {
+                        if (type !== 'notify') return; // Solo mensajes nuevos
 
-                    for (const msg of messages) {
-                        // Ignorar mensajes propios o sin contenido
-                        if (msg.key.fromMe || !msg.message) continue;
+                        for (const msg of messages) {
+                            // Ignorar mensajes propios o sin contenido
+                            if (msg.key.fromMe || !msg.message) continue;
 
-                        console.log(`📩 Mensaje recibido en ${sessionId}:`, msg.message.conversation || msg.message.extendedTextMessage?.text || '[Media]');
+                            console.log(`📩 Mensaje recibido en ${sessionId}:`, msg.message.conversation || msg.message.extendedTextMessage?.text || '[Media]');
 
-                        // Convertir mensaje de Baileys a formato compatible con tu MessageService
-                        const adaptedMessage = this.adaptBaileysMessage(msg, sessionId);
+                            // Convertir mensaje de Baileys a formato compatible con tu MessageService
+                            const adaptedMessage = this.adaptBaileysMessage(msg, sessionId);
 
-                        await this.messageService.handleIncomingMessage(adaptedMessage, sessionId, sock);
-                    }
-                });
-
-                // Manejar mensajes eliminados
-                sock.ev.on('messages.update', async (updates) => {
-                    for (const update of updates) {
-                        if (update.update.message === null) {
-                            console.log(`🗑️ Mensaje eliminado: ${update.key.id}`);
+                            await this.messageService.handleIncomingMessage(adaptedMessage, sessionId, sock);
                         }
-                    }
-                });
+                    });
 
-                console.log(`📩 Recepción activada para: ${sessionId}`);
+                    // Manejar mensajes eliminados
+                    sock.ev.on('messages.update', async (updates) => {
+                        for (const update of updates) {
+                            if (update.update.message === null) {
+                                console.log(`🗑️ Mensaje eliminado: ${update.key.id}`);
+                            }
+                        }
+                    });
+
+                    console.log(`📩 Recepción activada para: ${sessionId}`);
+                } catch (error) {
+                    console.log("error ", error);
+                }
             }
 
             // ✅ Guardar sesión
