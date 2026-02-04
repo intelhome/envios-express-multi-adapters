@@ -24,7 +24,6 @@ class BaileysAdapter {
     async connect(sessionId, receiveMessages = false) {
 
         try {
-
             // ✅ Verificar si ya existe una sesión activa
             if (this.sessions[sessionId]) {
                 const sessionData = this.sessions[sessionId];

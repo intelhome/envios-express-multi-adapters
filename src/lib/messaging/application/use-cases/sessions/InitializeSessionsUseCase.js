@@ -4,8 +4,11 @@ class InitializeSessionsUseCase {
         this.sessionRepository = sessionRepository;
     }
 
+    sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
     async execute() {
-        // Usa el repositorio en lugar de acceder directamente a la DB
         const users = await this.sessionRepository.findAll();
 
         if (users.length === 0) {
@@ -21,8 +24,15 @@ class InitializeSessionsUseCase {
                     user.id_externo,
                     user.receive_messages
                 );
+
+                // ✅ esperar 3 segundos antes de la siguiente sesión
+                await this.sleep(5000);
+
             } catch (error) {
                 console.error(`Error inicializando ${user.id_externo}:`, error.message);
+
+                // (opcional) también espera aunque falle
+                await this.sleep(5000);
             }
         }
     }
