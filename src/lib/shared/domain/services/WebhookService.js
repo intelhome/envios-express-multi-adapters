@@ -13,8 +13,6 @@ class WebhookService {
             try {
                 const payload = JSON.stringify(data);
 
-                console.log(payload);
-
                 const options = {
                     hostname: this.hostname,
                     path: this.path,

@@ -222,7 +222,7 @@ class MessageServiceBaileys {
         try {
             // Descargar el buffer
             const buffer = await downloadMediaMessage(
-                baileysMsg,
+                baileysMsg._raw,
                 'buffer',
                 {},
                 {
