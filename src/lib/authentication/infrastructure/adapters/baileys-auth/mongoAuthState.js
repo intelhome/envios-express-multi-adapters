@@ -16,6 +16,9 @@ const initAuthCreds = () => {
     nextPreKeyId: 1,
     firstUnuploadedPreKeyId: 1,
     accountSettings: { unarchiveChats: false },
+    // ✅ IMPORTANTE: Agregar estos campos
+    myAppStateKeyId: undefined,
+    platform: "unknown",
   };
 };
 
@@ -55,7 +58,6 @@ module.exports = async function useMongoDBAuthState(collection) {
       JSON.stringify(data, BufferJSON.replacer)
     );
 
-    // guardamos dentro de un campo "data" para no ensuciar el root del documento
     return collection.updateOne(
       { _id: id },
       { $set: { data: informationToStore } },
@@ -78,7 +80,7 @@ module.exports = async function useMongoDBAuthState(collection) {
   const removeData = async (id) => {
     try {
       await collection.deleteOne({ _id: id });
-    } catch (err) {}
+    } catch (err) { }
   };
 
   const creds = (await readData("creds")) || initAuthCreds();
@@ -94,7 +96,7 @@ module.exports = async function useMongoDBAuthState(collection) {
             ids.map(async (id) => {
               let value = await readData(`${type}-${id}`);
 
-              // ✅ ESTE ERA TU BUG
+              // ✅ Deserialización correcta para app-state-sync-key
               if (type === "app-state-sync-key" && value) {
                 value = proto.Message.AppStateSyncKeyData.fromObject(value);
               }
@@ -123,6 +125,7 @@ module.exports = async function useMongoDBAuthState(collection) {
       },
     },
 
+    // ✅ CRÍTICO: Guardar credenciales automáticamente cuando cambien
     saveCreds: async () => {
       return writeData(creds, "creds");
     },

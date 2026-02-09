@@ -1,5 +1,5 @@
 # Usa la imagen oficial de Node.js con la versión 16.16.0
-FROM node:16.16.0
+FROM node:23.9.0
 
 # Establece el directorio de trabajo en el contenedor
 WORKDIR /usr/src/app
