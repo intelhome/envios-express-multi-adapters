@@ -39,7 +39,7 @@ class BaileysAdapter {
             console.log(`🔄 Conectando Baileys para: ${sessionId}`);
 
             const sessionCollection = `session_auth_info_${sessionId}`;
-            const collection_session = getCollection(sessionCollection);
+            const collection_session = await getCollection(sessionCollection);
 
             const { state, saveCreds } = await mongoAuthState(collection_session);
 
@@ -53,6 +53,13 @@ class BaileysAdapter {
                 defaultQueryTimeoutMs: undefined,
                 logger: log({ level: "silent" }),
             });
+
+            // ✅ Guardar sesión
+            this.sessions[sessionId] = {
+                sock,
+                status: 'connecting',
+                receiveMessages
+            };
 
             // ✅ Guardar credenciales cuando cambien
             sock.ev.on('creds.update', saveCreds);
@@ -225,13 +232,6 @@ class BaileysAdapter {
                     console.log("error ", error);
                 }
             }
-
-            // ✅ Guardar sesión
-            this.sessions[sessionId] = {
-                sock,
-                status: 'connecting',
-                receiveMessages
-            };
 
             console.log(`✅ Baileys iniciado exitosamente: ${sessionId}`);
             return sock;
@@ -548,8 +548,8 @@ class BaileysAdapter {
     shouldReconnect(statusCode) {
         const noReconnect = [
             DisconnectReason.loggedOut,
-            DisconnectReason.badSession,
-            DisconnectReason.connectionReplaced
+            // DisconnectReason.badSession,
+            // DisconnectReason.connectionReplaced
         ];
 
         return !noReconnect.includes(statusCode);
