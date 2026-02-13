@@ -20,7 +20,30 @@ class UserRepository {
 
     async findByExternalId(id_externo) {
         const collection = getCollection(this.collectionName);
-        return await collection.findOne({ id_externo });
+        const sessionData = await collection.findOne({ id_externo });
+
+        if (!sessionData) {
+            return null;
+        }
+
+        // Obtener la sesión activa del servicio correspondiente
+        const { whatsappProvider } = require('../../../shared/infrastructure/config/dependencies');
+        const activeSession = whatsappProvider.getServiceSession(id_externo);
+
+        return {
+            ...sessionData,
+            activeSession: activeSession ? {
+                status: activeSession.status,
+                isConnected: activeSession.status === 'CONNECTED' || activeSession.status === 'ready',
+                // Datos del usuario de WhatsApp
+                userId: activeSession.sock?.user?.id || null,
+                userName: activeSession.sock?.user?.name || null,
+                userPhone: activeSession.sock?.user?.id ? activeSession.sock.user.id.split(':')[0] : null,
+                // Información adicional útil
+                timestamp: new Date(),
+                library: process.env.WHATSAPP_PROVIDER || 'whatsapp-web'
+            } : null
+        };
     }
 
     async findAll() {
