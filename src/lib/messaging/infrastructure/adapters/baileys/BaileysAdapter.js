@@ -1,4 +1,4 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, delay, Browsers } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, delay, Browsers, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const qrcode = require('qrcode');
 const fs = require('fs');
@@ -43,7 +43,10 @@ class BaileysAdapter {
 
             const { state, saveCreds } = await mongoAuthState(collection_session);
 
+            const { version, isLatest } = await fetchLatestBaileysVersion();
+
             const sock = makeWASocket({
+                version,
                 auth: state,
                 printQRInTerminal: false,
                 browser: ['WhatsApp Bot', 'Chrome', '1.0.0'],
