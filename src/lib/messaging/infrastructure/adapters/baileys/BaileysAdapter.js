@@ -418,7 +418,7 @@ class BaileysAdapter {
     }
 
     async sendMediaByType(id_externo, chatId, mediaData) {
-        const { type, link, tempMessage, latitud, longitud, file } = mediaData;
+        const { type, link, tempMessage, latitud, longitud, file, pdfsAdjuntos } = mediaData;
         const sessionData = this.sessions[id_externo];
 
         if (!sessionData || !sessionData.sock) {
@@ -489,6 +489,28 @@ class BaileysAdapter {
                     caption: tempMessage || '',
                     mimetype: 'application/pdf'
                 });
+                break;
+            }
+
+            case 'multiplePdf': {
+                if (mediaData.pdfsAdjuntos && mediaData.pdfsAdjuntos.length > 0) {
+                    for (let i = 0; i < mediaData.pdfsAdjuntos.length; i++) {
+                        const pdf = mediaData.pdfsAdjuntos[i];
+                        const isLast = i === mediaData.pdfsAdjuntos.length - 1;
+
+                        if (!pdf.base64) continue; // saltar si no hay base64
+
+                        const buffer = Buffer.from(pdf.base64, 'base64');
+
+                        result = await sock.sendMessage(jid, {
+                            document: buffer,
+                            fileName: pdf.nombre || 'documento.pdf',
+                            caption: isLast ? tempMessage : '',
+                            mimetype: 'application/pdf'
+                        });
+                    }
+                    break;
+                }
                 break;
             }
 

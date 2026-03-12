@@ -7,7 +7,7 @@ class SendMediaMessageUseCase {
     }
 
     async execute(id_externo, mediaData) {
-        const { number, tempMessage, link, type, latitud, longitud, file } = mediaData;
+        const { number, tempMessage, link, type, latitud, longitud, file, pdfsAdjuntos } = mediaData;
 
         // Verificar conexión
         const isConnected = await this.whatsappProvider.isConnected(id_externo);
@@ -60,7 +60,8 @@ class SendMediaMessageUseCase {
                 tempMessage,
                 latitud,
                 longitud,
-                file
+                file,
+                pdfsAdjuntos
             });
         } catch (error) {
             console.error(`❌ Error enviando media para ${id_externo}:`, error);
