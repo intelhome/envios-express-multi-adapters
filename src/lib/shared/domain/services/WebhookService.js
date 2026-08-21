@@ -73,7 +73,7 @@ class WebhookService {
                             reject(new Error(`Webhook respondió ${res.statusCode}: ${responseData}`));
                         } else {
                             // Error definitivo (401/404/422, etc.): reintentar no lo resolverá
-                            console.warn(`⚠️ Webhook Warning [${res.statusCode}]`);
+                            console.warn(`⚠️ Webhook Warning [${res.statusCode}]:`, responseData);
                             resolve({ success: false, status: res.statusCode, data: responseData });
                         }
                     });

@@ -65,10 +65,12 @@ async function startServer() {
         // Exige el mismo token que se usa para abrir /scan antes de permitir
         // la conexión del socket: sin esto, cualquiera que adivine un
         // id_externo podría unirse a esa sala y ver el QR/estado ajeno.
+        // Controlado por el mismo switch REQUIRE_API_TOKEN que apiAuth.js.
+        const requireToken = process.env.REQUIRE_API_TOKEN === 'true';
         const scanToken = process.env.API_ACCESS_TOKEN;
-        if (!scanToken) {
-            logger.warn("⚠️ API_ACCESS_TOKEN no está configurado: Socket.IO acepta cualquier conexión sin validar token.");
-        } else {
+        if (requireToken && !scanToken) {
+            logger.warn("⚠️ REQUIRE_API_TOKEN=true pero API_ACCESS_TOKEN no está configurado: Socket.IO acepta cualquier conexión sin validar token.");
+        } else if (requireToken) {
             io.use((socket, next) => {
                 const token = socket.handshake.auth?.token || socket.handshake.query?.token;
                 if (token !== scanToken) {
@@ -92,7 +94,7 @@ async function startServer() {
         // Ruta especial para escanear QR: requiere el mismo token que Socket.IO
         // (SIGCENTER lo agrega como query param al generar el scanUrl).
         app.get("/scan", (req, res) => {
-            if (scanToken && req.query.token !== scanToken) {
+            if (requireToken && req.query.token !== scanToken) {
                 return res.status(401).send("No autorizado");
             }
             return userController.scanQR(req, res);
@@ -103,7 +105,8 @@ async function startServer() {
             res.send("WhatsApp API Server Running ✅");
         });
 
-        // Protege todo /api/* con la API key compartida (ver apiAuth.js)
+        // Protege todo /api/* con la API key compartida (ver apiAuth.js).
+        // Activado/desactivado con el switch REQUIRE_API_TOKEN (.env).
         app.use('/api', apiAuth);
 
         // registerUserModule(app);
