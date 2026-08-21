@@ -1,5 +1,6 @@
 const moment = require('moment-timezone');
 const { ACK_STATUS } = require('../../../../messaging/infrastructure/config/whatsapp.config');
+const messageQueue = require('../../../../shared/infrastructure/services/MessageQueue');
 
 class SendMessageUseCase {
     constructor(whatsappProvider) {
@@ -64,15 +65,19 @@ class SendMessageUseCase {
 
                 console.log('📎 Enviando mensaje con multimedia');
 
-                result = await this.whatsappProvider.sendMediaMessage(id_externo, chatId, {
-                    mimeType,
-                    base64Data,
-                    fileName: fileName || defaultName,
-                    caption: caption || messageText || ''
-                });
+                result = await messageQueue.enqueue(id_externo, () =>
+                    this.whatsappProvider.sendMediaMessage(id_externo, chatId, {
+                        mimeType,
+                        base64Data,
+                        fileName: fileName || defaultName,
+                        caption: caption || messageText || ''
+                    })
+                );
             } else {
                 console.log('💬 Enviando mensaje de texto simple');
-                result = await this.whatsappProvider.sendMessage(id_externo, chatId, messageText);
+                result = await messageQueue.enqueue(id_externo, () =>
+                    this.whatsappProvider.sendMessage(id_externo, chatId, messageText)
+                );
             }
         } catch (sendError) {
             console.error('❌ Error al enviar mensaje:', sendError);

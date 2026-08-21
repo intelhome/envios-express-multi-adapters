@@ -128,7 +128,7 @@ class MessageServiceBaileys {
             // 8. Enviar al Webhook
             return await this.webhookService.sendToWebhook({
                 id: baileysMsg._raw.key.id,
-                empresa: 'sigcrm_clinicasancho',
+                empresa: process.env.INCOMING_MSG_WEBHOOK_EMPRESA_LABEL || 'sin-configurar',
                 // name: contactName,
                 name: senderNumber,
                 senderNumber: senderNumber,

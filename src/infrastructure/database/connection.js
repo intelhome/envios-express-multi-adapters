@@ -12,7 +12,9 @@ let db = null;
 const connectToMongoDB = async () => {
     try {
         client = new MongoClient(config.mongoose.url, {
-            // useNewUrlParser y useUnifiedTopology ya no son necesarios en versiones nuevas
+            maxPoolSize: Number(process.env.MONGO_MAX_POOL_SIZE || 20),
+            serverSelectionTimeoutMS: 10000,
+            connectTimeoutMS: 10000,
         });
 
         await client.connect();

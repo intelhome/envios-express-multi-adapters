@@ -135,17 +135,23 @@
         }
       }
 
-      .loading {
-        animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      .qr-spinner {
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        border: 5px solid rgba(102, 126, 234, 0.15);
+        border-top-color: #667eea;
+        border-right-color: #764ba2;
+        animation: spin 0.9s linear infinite;
       }
 
-      @keyframes pulse {
-        0%,
-        100% {
-          opacity: 1;
-        }
-        50% {
-          opacity: 0.5;
+      .qr-spinner.hidden {
+        display: none;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
         }
       }
 
@@ -413,11 +419,12 @@
       </div>
 
       <div class="qrcode-container" id="qrcodeContainer">
+        <div class="qr-spinner" id="qrSpinner"></div>
         <img
-          src="./assets/loader.gif"
-          alt="Cargando código QR"
+          src=""
+          alt="Código QR de WhatsApp"
           id="qrcode"
-          class="loading"
+          style="display: none"
         />
       </div>
 
@@ -455,6 +462,7 @@
     <script>
       // Elementos del DOM
       const qrcode = document.getElementById("qrcode");
+      const qrSpinner = document.getElementById("qrSpinner");
       const qrcodeContainer = document.getElementById("qrcodeContainer");
       const iduser = document.getElementById("iduser");
       const instructionCard = document.getElementById("instructionCard");
@@ -464,18 +472,32 @@
       const statusText = document.getElementById("statusText");
       const whatsappIcon = document.getElementById("whatsappIcon");
 
-      // Obtener el id_externo de la URL
+      // Obtener el id_externo (y el token de acceso) de la URL
       const urlParams = new URLSearchParams(window.location.search);
       const id_externo = urlParams.get("id_externo");
+      const accessToken = urlParams.get("token");
 
       // Conexión al socket
-      const socket = io();
+      const socket = io({ auth: { token: accessToken }, query: { token: accessToken } });
 
       if (id_externo) {
         socket.emit("joinSession", id_externo);
         console.log(`📱 Uniéndose a sesión: ${id_externo}`);
       } else {
         updateStatus("disconnected", "ID de usuario no encontrado");
+      }
+
+      // Muestra el spinner CSS y oculta la imagen (QR/ícono)
+      function showSpinner() {
+        qrSpinner.classList.remove("hidden");
+        qrcode.style.display = "none";
+      }
+
+      // Oculta el spinner y muestra la imagen con el src indicado
+      function showImage(src) {
+        qrSpinner.classList.add("hidden");
+        qrcode.setAttribute("src", src);
+        qrcode.style.display = "block";
       }
 
       // Función para actualizar el estado visual
@@ -581,20 +603,20 @@
       // Evento: Recibir QR
       socket.on("qr", (url) => {
         console.log("📸 QR recibido");
-        qrcode.setAttribute("src", url);
-        qrcode.classList.remove("loading");
+        showImage(url);
         updateStatus("waiting", "Escanea el código QR");
       });
 
       // Evento: Actualizar estado del QR
       socket.on("qrstatus", (src) => {
         console.log(`📊 Estado QR actualizado: ${src}`);
-        qrcode.setAttribute("src", src);
 
-        // Si es el loader, mostrar estado de espera
+        // Si es el loader, mostrar el spinner en vez de la imagen
         if (src.includes("loader.gif")) {
-          qrcode.classList.add("loading");
+          showSpinner();
           updateStatus("waiting", "Generando código QR...");
+        } else {
+          showImage(src);
         }
       });
 
@@ -612,7 +634,7 @@
 
       // Evento: Reconectando Sesion
       socket.on("reconnecting", (src) => {
-        qrcode.setAttribute("src", src);
+        showSpinner();
 
         console.log("🔄 Sesión reconectando...");
         updateStatus("reconnecting", "Conectando...");

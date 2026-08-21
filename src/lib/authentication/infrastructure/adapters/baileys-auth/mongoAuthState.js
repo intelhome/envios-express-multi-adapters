@@ -2,6 +2,7 @@ const { proto } = require("@whiskeysockets/baileys/WAProto");
 const { Curve, signedKeyPair } = require("@whiskeysockets/baileys/lib/Utils/crypto");
 const { generateRegistrationId } = require("@whiskeysockets/baileys/lib/Utils/generics");
 const { randomBytes } = require("crypto");
+const logger = require("../../../../shared/infrastructure/logging/logger");
 
 const initAuthCreds = () => {
   const identityKey = Curve.generateKeyPair();
@@ -73,6 +74,7 @@ module.exports = async function useMongoDBAuthState(collection) {
       const json = JSON.stringify(doc.data ?? null);
       return JSON.parse(json, BufferJSON.reviver);
     } catch (err) {
+      logger.error(`❌ Error leyendo auth-state (${id}):`, err.message);
       return null;
     }
   };
@@ -109,18 +111,33 @@ module.exports = async function useMongoDBAuthState(collection) {
         },
 
         set: async (data) => {
-          const tasks = [];
+          const ops = [];
 
           for (const category of Object.keys(data)) {
             for (const id of Object.keys(data[category])) {
               const value = data[category][id];
               const key = `${category}-${id}`;
 
-              tasks.push(value ? writeData(value, key) : removeData(key));
+              if (value) {
+                const informationToStore = JSON.parse(
+                  JSON.stringify(value, BufferJSON.replacer)
+                );
+                ops.push({
+                  updateOne: {
+                    filter: { _id: key },
+                    update: { $set: { data: informationToStore } },
+                    upsert: true,
+                  },
+                });
+              } else {
+                ops.push({ deleteOne: { filter: { _id: key } } });
+              }
             }
           }
 
-          await Promise.all(tasks);
+          if (ops.length > 0) {
+            await collection.bulkWrite(ops, { ordered: false });
+          }
         },
       },
     },

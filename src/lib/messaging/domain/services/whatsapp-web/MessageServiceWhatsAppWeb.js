@@ -97,7 +97,7 @@ class MessageService {
             // 6. Enviar al Webhook
             return await this.webhookService.sendToWebhook({
                 id: message.id.id,
-                empresa: 'sigcrm_clinicasancho', // Puedes parametrizar esto si es dinámico
+                empresa: process.env.INCOMING_MSG_WEBHOOK_EMPRESA_LABEL || 'sin-configurar',
                 name: contactName,
                 senderNumber: senderNumber.replace('@c.us', ''),
                 reciberNumber: receiverNumber,

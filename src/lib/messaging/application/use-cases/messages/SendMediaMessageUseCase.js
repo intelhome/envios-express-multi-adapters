@@ -1,5 +1,6 @@
 const moment = require('moment-timezone');
 const { ACK_STATUS } = require('../../../../messaging/infrastructure/config/whatsapp.config');
+const messageQueue = require('../../../../shared/infrastructure/services/MessageQueue');
 
 class SendMediaMessageUseCase {
     constructor(whatsappProvider) {
@@ -54,15 +55,17 @@ class SendMediaMessageUseCase {
         let result;
 
         try {
-            result = await this.whatsappProvider.sendMediaByType(id_externo, chatId, {
-                type,
-                link,
-                tempMessage,
-                latitud,
-                longitud,
-                file,
-                pdfsAdjuntos
-            });
+            result = await messageQueue.enqueue(id_externo, () =>
+                this.whatsappProvider.sendMediaByType(id_externo, chatId, {
+                    type,
+                    link,
+                    tempMessage,
+                    latitud,
+                    longitud,
+                    file,
+                    pdfsAdjuntos
+                })
+            );
         } catch (error) {
             console.error(`❌ Error enviando media para ${id_externo}:`, error);
             throw error;

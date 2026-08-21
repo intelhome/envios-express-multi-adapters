@@ -44,10 +44,7 @@ class MessageController {
             });
 
         } catch (error) {
-            res.status(500).json({
-                status: false,
-                response: error.message,
-            });
+            next(error);
         }
     }
 
@@ -83,10 +80,7 @@ class MessageController {
             });
 
         } catch (error) {
-            res.status(500).json({
-                status: false,
-                response: error.message,
-            });
+            next(error);
         }
     }
 
@@ -121,10 +115,7 @@ class MessageController {
             });
 
         } catch (error) {
-            res.status(500).json({
-                status: false,
-                response: error.message,
-            });
+            next(error);
         }
     }
 }

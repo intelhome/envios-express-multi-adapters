@@ -8,6 +8,7 @@ const SocketService = require('../../../../shared/infrastructure/sockets/SocketS
 const { NO_RECONNECT_REASONS, DEFAULT_COUNTRY_CODE } = require('../../config/whatsapp.config');
 const mongoAuthState = require('../../../../authentication/infrastructure/adapters/baileys-auth/mongoAuthState');
 const { getCollection } = require('../../../../../infrastructure/database/connection');
+const WebhookService = require('../../../../shared/domain/services/WebhookService');
 
 class BaileysAdapter {
     constructor(sessionRepository, userRepository, messageService) {
@@ -15,6 +16,54 @@ class BaileysAdapter {
         this.sessionRepository = sessionRepository;
         this.userRepository = userRepository;
         this.messageService = messageService;
+
+        // Notifica a SIGCENTER (api_users_whatsapp) cuando una sesión se conecta o se
+        // desconecta. Es específico de la instalación que sirve a SIGCENTER: en otros
+        // despliegues de este mismo servicio (otro servidor, otro sistema) simplemente
+        // no se configura SIGCENTER_HOOK_HOSTNAME y este webhook queda desactivado, sin
+        // tocar código. No hay un valor por defecto a propósito: así nunca se notifica
+        // "por accidente" a un host que no corresponde a este despliegue.
+        this.sessionStatusWebhook = process.env.SIGCENTER_HOOK_HOSTNAME
+            ? new WebhookService({
+                hostname: process.env.SIGCENTER_HOOK_HOSTNAME,
+                path: process.env.SIGCENTER_HOOK_PATH || '/restful/hook-crm/estado-sesion-whatsapp',
+                protocol: process.env.SIGCENTER_HOOK_PROTOCOL || 'https',
+                port: process.env.SIGCENTER_HOOK_PORT ? Number(process.env.SIGCENTER_HOOK_PORT) : undefined,
+                timeout: 15000
+            })
+            : null;
+    }
+
+    /**
+     * Avisa a SIGCENTER el estado actual de la sesión (uniqCode = sessionId) para que
+     * actualice api_users_whatsapp sin depender del flujo manual de "Probar"/"Reactivación".
+     */
+    async notifySessionStatus(sessionId, connected, motivo = null) {
+        if (!this.sessionStatusWebhook) return; // este despliegue no habla con SIGCENTER
+
+        try {
+            let orgName = null;
+            let telefono = null;
+
+            if (connected) {
+                const sessionData = this.sessions[sessionId];
+                if (sessionData?.sock?.user) {
+                    orgName = sessionData.sock.user.name || sessionData.sock.user.verifiedName || null;
+                    telefono = await this.getPhoneNumber(sessionId);
+                }
+            }
+
+            await this.sessionStatusWebhook.sendToWebhook({
+                uniqCode: sessionId,
+                status: connected ? 1 : 0,
+                orgName,
+                telefono,
+                motivo, // 'logout' | 'error' | null — ver getDisconnectCategory()
+                token: process.env.SIGCENTER_HOOK_TOKEN
+            });
+        } catch (error) {
+            console.error(`❌ Error notificando estado de sesión a SIGCENTER (${sessionId}):`, error.message);
+        }
     }
 
     getServiceSession(sessionId) {
@@ -121,6 +170,9 @@ class BaileysAdapter {
 
                     // Emitir estado autenticado
                     SocketService.emitStatus(sessionId, 'authenticated');
+
+                    // Notificar a SIGCENTER que la sesión quedó conectada
+                    this.notifySessionStatus(sessionId, true);
                 }
 
                 // Conexión cerrada
@@ -146,6 +198,16 @@ class BaileysAdapter {
                         console.log(`✅ Estado actualizado en BD: ${sessionId}`);
                     } catch (error) {
                         console.error(`Error actualizando estado en DB:`, error.message);
+                    }
+
+                    // 2b. Notificar a SIGCENTER solo si es una desconexión definitiva (no un
+                    // reconnect automático de 5s, para no disparar el banner de "sesión cerrada"
+                    // ni pisar orgName/telefono por un blip transitorio). El "motivo" le permite
+                    // a SIGCENTER mostrar un mensaje distinto si fue el usuario quien cerró
+                    // sesión desde el teléfono, o si fue una falla que exige re-vincular.
+                    const motivoDesconexion = this.getDisconnectCategory(statusCode);
+                    if (motivoDesconexion) {
+                        this.notifySessionStatus(sessionId, false, motivoDesconexion);
                     }
 
                     // 3. Emitir evento de socket
@@ -571,13 +633,28 @@ class BaileysAdapter {
     }
 
     shouldReconnect(statusCode) {
-        const noReconnect = [
-            DisconnectReason.loggedOut,
-            // DisconnectReason.badSession,
-            // DisconnectReason.connectionReplaced
+        return this.getDisconnectCategory(statusCode) === null;
+    }
+
+    /**
+     * Clasifica el cierre de conexión en algo que SIGCENTER pueda mostrarle al usuario:
+     * - 'logout': el usuario cerró sesión o desvinculó el dispositivo desde el teléfono.
+     * - 'error': la sesión quedó inválida/reemplazada y no se puede recuperar sola
+     *            (hay que volver a escanear el QR), aunque no fue una acción del usuario.
+     * - null: corte transitorio (red, reinicio interno de Baileys) — se reconecta solo,
+     *         no se notifica a SIGCENTER.
+     */
+    getDisconnectCategory(statusCode) {
+        const cierreManual = [DisconnectReason.loggedOut];
+        const fallaIrrecuperable = [
+            DisconnectReason.badSession,
+            DisconnectReason.connectionReplaced,
+            DisconnectReason.multideviceMismatch,
         ];
 
-        return !noReconnect.includes(statusCode);
+        if (cierreManual.includes(statusCode)) return 'logout';
+        if (fallaIrrecuperable.includes(statusCode)) return 'error';
+        return null;
     }
 
     /**

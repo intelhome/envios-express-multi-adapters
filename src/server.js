@@ -15,7 +15,9 @@ const { connectToMongoDB, closeConnections } = require("./infrastructure/databas
 const InitializeSessionsUseCase = require("./lib/messaging/application/use-cases/sessions/InitializeSessionsUseCase");
 
 // Middlewares
-const { errorHandler } = require("./lib/api/middlewares/errorHandler");
+const { errorHandler, notFound } = require("./lib/api/middlewares/errorHandler");
+const apiAuth = require("./lib/api/middlewares/apiAuth");
+const logger = require("./lib/shared/infrastructure/logging/logger");
 
 // Inicializar Modulos
 const registerUserModule = require("./lib/api/registerUserModule");
@@ -44,12 +46,37 @@ async function startServer() {
         const server = http.createServer(app);
 
         // 6. Inicializar Socket.IO
+        const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+            .split(",")
+            .map((o) => o.trim())
+            .filter(Boolean);
+
+        if (allowedOrigins.length === 0) {
+            logger.warn("⚠️ ALLOWED_ORIGINS no está configurado: Socket.IO acepta cualquier origen.");
+        }
+
         const io = socketIO(server, {
             cors: {
-                origin: "*",
+                origin: allowedOrigins.length > 0 ? allowedOrigins : "*",
                 methods: ["GET", "POST"]
             }
         });
+
+        // Exige el mismo token que se usa para abrir /scan antes de permitir
+        // la conexión del socket: sin esto, cualquiera que adivine un
+        // id_externo podría unirse a esa sala y ver el QR/estado ajeno.
+        const scanToken = process.env.API_ACCESS_TOKEN;
+        if (!scanToken) {
+            logger.warn("⚠️ API_ACCESS_TOKEN no está configurado: Socket.IO acepta cualquier conexión sin validar token.");
+        } else {
+            io.use((socket, next) => {
+                const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+                if (token !== scanToken) {
+                    return next(new Error("No autorizado"));
+                }
+                next();
+            });
+        }
 
         // Configurar Socket Service
         SocketService.setIO(io);
@@ -62,21 +89,31 @@ async function startServer() {
         console.log("✅ Socket.IO inicializado");
 
         // 7. Configurar rutas
-        // Ruta especial para escanear QR
-        app.get("/scan", (req, res) => userController.scanQR(req, res));
+        // Ruta especial para escanear QR: requiere el mismo token que Socket.IO
+        // (SIGCENTER lo agrega como query param al generar el scanUrl).
+        app.get("/scan", (req, res) => {
+            if (scanToken && req.query.token !== scanToken) {
+                return res.status(401).send("No autorizado");
+            }
+            return userController.scanQR(req, res);
+        });
 
         // Ruta de prueba
         app.get("/", (req, res) => {
             res.send("WhatsApp API Server Running ✅");
         });
 
-        // Middleware de manejo de errores (debe ir al final)
-        app.use(errorHandler);
+        // Protege todo /api/* con la API key compartida (ver apiAuth.js)
+        app.use('/api', apiAuth);
 
         // registerUserModule(app);
         const { userController } = registerUserModule(app);
         registerMessageModule(app);
         registerSessionModule(app);
+
+        // Middleware de manejo de errores (debe ir después de las rutas)
+        app.use(notFound);
+        app.use(errorHandler);
 
         // 8. Reconectar sesiones existentes
         console.log("🔄 Reconectando sesiones existentes...");
