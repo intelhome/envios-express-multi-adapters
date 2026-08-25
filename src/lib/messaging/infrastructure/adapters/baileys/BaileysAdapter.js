@@ -647,8 +647,11 @@ class BaileysAdapter {
     getDisconnectCategory(statusCode) {
         const cierreManual = [DisconnectReason.loggedOut];
         const fallaIrrecuperable = [
-            DisconnectReason.badSession,
-            DisconnectReason.connectionReplaced,
+            // badSession y connectionReplaced se sacaron de esta lista: Baileys los
+            // dispara también por baches transitorios del socket (no solo por un
+            // logout real), y tratarlos como irrecuperables estaba cortando sesiones
+            // activas sin que el usuario cerrara sesión desde el teléfono. Se dejan
+            // reconectar solos, como antes.
             DisconnectReason.multideviceMismatch,
         ];
 
