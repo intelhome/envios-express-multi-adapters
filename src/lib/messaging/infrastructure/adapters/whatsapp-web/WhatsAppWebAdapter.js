@@ -283,6 +283,15 @@ class WhatsAppWebAdapter {
         }
     }
 
+    /**
+     * Cierra todas las sesiones activas. Se usa en el shutdown del servidor para
+     * que el cliente se cierre limpio en vez de cortarse en seco con el proceso.
+     */
+    async disconnectAll() {
+        const sessionIds = Object.keys(this.sessions);
+        await Promise.all(sessionIds.map((sessionId) => this.disconnect(sessionId)));
+    }
+
     async sendMessage(sessionId, phone, message) {
         const client = this.sessions[sessionId];
         if (!client) {

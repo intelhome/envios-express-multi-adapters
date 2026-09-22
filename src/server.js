@@ -177,7 +177,7 @@ async function startServer() {
 
                 // Desconectar WhatsApp
                 if (whatsappProvider) {
-                    await whatsappProvider.disconnect();
+                    await whatsappProvider.disconnectAll();
                 }
 
                 // Cerrar conexiones de base de datos

@@ -80,9 +80,10 @@ class BaileysAdapter {
                     console.log(`✅ Sesión ${sessionId} ya está conectada`);
                     return sessionData.sock;
                 }
-                // Si existe pero no está conectada, destruirla
+                // Si existe pero no está conectada, destruirla (sin logout: es solo
+                // limpieza local, no un cierre de sesión pedido por el usuario)
                 console.log(`⚠️ Destruyendo sesión anterior de ${sessionId}`);
-                await this.disconnect(sessionId);
+                await this.disconnect(sessionId, { logout: false });
             }
 
             console.log(`🔄 Conectando Baileys para: ${sessionId}`);
@@ -304,16 +305,22 @@ class BaileysAdapter {
         } catch (error) {
             console.error(`❌ Error conectando Baileys para ${sessionId}:`, error.message);
 
-            // Limpiar sesión fallida
+            // Limpiar sesión fallida (sin logout: el intento de conexión falló, no
+            // hay que desvincular el dispositivo por eso)
             if (this.sessions[sessionId]) {
-                await this.disconnect(sessionId);
+                await this.disconnect(sessionId, { logout: false });
             }
 
             throw new Error(`Error al conectar Baileys: ${error.message}`);
         }
     }
 
-    async disconnect(sessionId) {
+    /**
+     * @param {boolean} logout - true desvincula el dispositivo de WhatsApp (cierre
+     *   de sesión real, pedido por el usuario). false solo cierra el socket local
+     *   (limpieza interna / shutdown del servidor), dejando el pairing intacto.
+     */
+    async disconnect(sessionId, { logout = true } = {}) {
         try {
             const sessionData = this.sessions[sessionId];
             if (sessionData) {
@@ -323,7 +330,11 @@ class BaileysAdapter {
                     const { sock } = sessionData;
                     if (sock) {
                         sock.ev.removeAllListeners();
-                        await sock.logout();
+                        if (logout) {
+                            await sock.logout();
+                        } else {
+                            sock.end(undefined);
+                        }
                     }
                 } catch (error) {
                     console.warn(`⚠️ Error al cerrar socket ${sessionId}:`, error.message);
@@ -335,6 +346,17 @@ class BaileysAdapter {
         } catch (error) {
             console.error(`❌ Error desconectando ${sessionId}:`, error.message);
         }
+    }
+
+    /**
+     * Cierra todas las sesiones activas sin desvincularlas (mismo espíritu que
+     * disconnect con logout:false). Se usa en el shutdown del servidor para que
+     * el socket de Baileys se cierre limpio en vez de cortarse en seco con el
+     * proceso, lo que reduce los "Bad MAC" al reconectar en el próximo arranque.
+     */
+    async disconnectAll() {
+        const sessionIds = Object.keys(this.sessions);
+        await Promise.all(sessionIds.map((sessionId) => this.disconnect(sessionId, { logout: false })));
     }
 
     async sendMessage(sessionId, phone, message) {

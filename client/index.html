@@ -649,6 +649,7 @@
       // Evento: Sesión Cerrada
       socket.on("session-closed", () => {
         console.log("❌ Sesión de WhatsApp cerrada");
+        showSpinner();
         updateStatus("disconnected", "Sesión cerrada - Escanea de nuevo");
       });
 
