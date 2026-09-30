@@ -169,28 +169,36 @@ async function startServer() {
             process.exit(1);
         });
 
+        let cerrando = false;
         async function gracefulShutdown() {
+            if (cerrando) return;
+            cerrando = true;
             console.log("\n🛑 Cerrando servidor...");
 
-            server.close(async () => {
-                console.log("✅ Servidor HTTP cerrado");
+            setTimeout(() => {
+                console.error("⚠️ Forzando cierre del servidor");
+                process.exit(1);
+            }, 10000);
 
-                // Desconectar WhatsApp
+            // No se espera al callback de server.close(): con clientes de Socket.IO
+            // conectados (página /scan abierta) nunca se dispara, y el cierre forzado
+            // mataba el proceso sin llegar a cerrar las sesiones de WhatsApp.
+            server.close(() => console.log("✅ Servidor HTTP cerrado"));
+
+            try {
+                // Desconectar WhatsApp (sin logout, las sesiones quedan vinculadas)
                 if (whatsappProvider) {
                     await whatsappProvider.disconnectAll();
                 }
 
                 // Cerrar conexiones de base de datos
                 await closeConnections();
+            } catch (error) {
+                console.error("❌ Error durante el cierre:", error.message);
+            }
 
-                console.log("👋 Servidor cerrado completamente");
-                process.exit(0);
-            });
-
-            setTimeout(() => {
-                console.error("⚠️ Forzando cierre del servidor");
-                process.exit(1);
-            }, 10000);
+            console.log("👋 Servidor cerrado completamente");
+            process.exit(0);
         }
     } catch (error) {
         console.error("❌ Error iniciando servidor:", error);

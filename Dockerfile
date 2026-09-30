@@ -16,5 +16,6 @@ COPY . .
 # Expone el puerto en el que corre la aplicación
 EXPOSE 4010
 
-# Comando para iniciar la aplicación
-CMD ["npm", "start"]
+# Se ejecuta node directo (no "npm start") para que reciba SIGTERM al detener o
+# reiniciar el contenedor y corra el cierre ordenado de las sesiones de WhatsApp.
+CMD ["node", "src/server.js"]

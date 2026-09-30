@@ -1,4 +1,4 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, delay, Browsers, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, delay, Browsers, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const qrcode = require('qrcode');
 const fs = require('fs');
@@ -13,6 +13,13 @@ const WebhookService = require('../../../../shared/domain/services/WebhookServic
 class BaileysAdapter {
     constructor(sessionRepository, userRepository, messageService) {
         this.sessions = {};
+        // connect() en curso por sesión: evita que dos llamadas simultáneas (arranque,
+        // reconexión automática, página /scan) creen dos sockets para el mismo número,
+        // que se patean entre sí (connectionReplaced) y dejan sockets zombie en memoria.
+        this.connecting = new Map();
+        // La versión de WhatsApp Web se consulta una sola vez (es un request HTTP a
+        // GitHub) en vez de en cada conexión/reconexión de cada sesión.
+        this.waVersionPromise = null;
         this.sessionRepository = sessionRepository;
         this.userRepository = userRepository;
         this.messageService = messageService;
@@ -70,7 +77,33 @@ class BaileysAdapter {
         return this.sessions[sessionId] || null;
     }
 
-    async connect(sessionId, receiveMessages = false) {
+    async getWaVersion() {
+        if (!this.waVersionPromise) {
+            this.waVersionPromise = fetchLatestBaileysVersion()
+                .then(({ version }) => version)
+                .catch((error) => {
+                    this.waVersionPromise = null; // reintentar en la próxima conexión
+                    console.warn(`⚠️ No se pudo obtener la versión de WhatsApp Web, se usa la de Baileys:`, error.message);
+                    return undefined;
+                });
+        }
+        return this.waVersionPromise;
+    }
+
+    connect(sessionId, receiveMessages = false) {
+        const enCurso = this.connecting.get(sessionId);
+        if (enCurso) {
+            console.log(`⏳ Conexión de ${sessionId} ya en curso, se reutiliza`);
+            return enCurso;
+        }
+
+        const promise = this._connect(sessionId, receiveMessages)
+            .finally(() => this.connecting.delete(sessionId));
+        this.connecting.set(sessionId, promise);
+        return promise;
+    }
+
+    async _connect(sessionId, receiveMessages = false) {
 
         try {
             // ✅ Verificar si ya existe una sesión activa
@@ -93,18 +126,27 @@ class BaileysAdapter {
 
             const { state, saveCreds } = await mongoAuthState(collection_session);
 
-            const { version, isLatest } = await fetchLatestBaileysVersion();
+            const version = await this.getWaVersion();
+            const logger = log({ level: "silent" });
 
             const sock = makeWASocket({
-                version,
-                auth: state,
+                ...(version ? { version } : {}),
+                auth: {
+                    creds: state.creds,
+                    // Cache en memoria de las claves Signal: se siguen guardando en Mongo
+                    // igual que antes, pero ya no se releen de Mongo en cada mensaje.
+                    keys: makeCacheableSignalKeyStore(state.keys, logger),
+                },
                 printQRInTerminal: false,
                 browser: ['WhatsApp Bot', 'Chrome', '1.0.0'],
                 qrTimeout: 60 * 1000,
                 syncFullHistory: false,
                 markOnlineOnConnect: true,
-                defaultQueryTimeoutMs: undefined,
-                logger: log({ level: "silent" }),
+                // Antes estaba en undefined, lo que anulaba el default de Baileys y dejaba
+                // las consultas sin timeout: un envío colgado bloqueaba para siempre la
+                // cola de mensajes de esa sesión (MessageQueue es secuencial por sesión).
+                defaultQueryTimeoutMs: 60 * 1000,
+                logger,
             });
 
             // ✅ Guardar sesión
@@ -178,6 +220,16 @@ class BaileysAdapter {
 
                 // Conexión cerrada
                 if (connection === 'close') {
+                    // Si este socket ya fue reemplazado por uno más nuevo de la misma
+                    // sesión, su cierre no debe tocar nada: antes borraba de memoria al
+                    // socket nuevo (que seguía vivo como zombie) y disparaba otra reconexión.
+                    const actual = this.sessions[sessionId];
+                    if (actual && actual.sock !== sock) {
+                        console.log(`ℹ️ Cierre de un socket antiguo de ${sessionId}, se ignora`);
+                        sock.ev.removeAllListeners();
+                        return;
+                    }
+
                     const statusCode = (lastDisconnect?.error instanceof Boom)
                         ? lastDisconnect.error.output.statusCode
                         : 500;
