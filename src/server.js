@@ -1,4 +1,6 @@
 require("dotenv").config();
+// Silencia el ruido de "Bad MAC" de libsignal (ver el archivo)
+require("./lib/shared/infrastructure/logging/libsignalNoiseFilter").instalar();
 const express = require("express");
 const http = require("http");
 const socketIO = require("socket.io");
